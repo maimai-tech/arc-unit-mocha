@@ -11,6 +11,7 @@ final class MochaEngine extends ArcanistUnitTestEngine {
     private $coverReportDir;
     private $coverExcludes;
     private $testIncludes;
+    private $coverEnable;
 
     /**
      * Determine which executables and test paths to use.
@@ -42,6 +43,9 @@ final class MochaEngine extends ArcanistUnitTestEngine {
 
         $this->coverExcludes = $config->getConfigFromAnySource(
             'unit.mocha.coverage.exclude');
+
+        $this->coverEnable = $config->getConfigFromAnySource(
+            'unit.mocha.coverage.enable', 1);
 
         $this->testIncludes = $config->getConfigFromAnySource(
             'unit.mocha.test.include',
@@ -81,14 +85,13 @@ final class MochaEngine extends ArcanistUnitTestEngine {
             }
         }
 
-        if ($this->getEnableCoverage() !== false) {
+        if ($this->getEnableCoverage() !== false && $this->coverEnable !== false) {
             // Remove coverage report if it already exists
             if (file_exists($cover_xml_path)) {
                 if(!unlink($cover_xml_path)) {
                     throw new Exception("Couldn't delete old coverage report '".$cover_xml_path."'");
                 }
             }
-
             // Build and run the coverage command
             $future = $this->buildCoverFuture();
             $future->setCWD($this->projectRoot);
@@ -98,7 +101,6 @@ final class MochaEngine extends ArcanistUnitTestEngine {
         // Parse and return the xunit output
         $this->parser = new ArcanistXUnitTestResultParser();
         $results = $this->parseTestResults($xunit_tmp, $cover_xml_path);
-
         return $results;
     }
 
@@ -110,7 +112,7 @@ final class MochaEngine extends ArcanistUnitTestEngine {
                 $include_opts .= ' ' . escapeshellarg($include_glob);
             }
         }
-        return new ExecFuture('%C -R xunit --reporter-options output=%s %C',
+        return new ExecFuture('%C -R xunit --require @babel/register --reporter-options output=%s %C',
                               $this->mochaBin,
                               $xunit_tmp,
                               $include_opts);
@@ -149,8 +151,7 @@ final class MochaEngine extends ArcanistUnitTestEngine {
 
     protected function parseTestResults($xunit_tmp, $cover_xml_path) {
         $results = $this->parser->parseTestResults(Filesystem::readFile($xunit_tmp));
-
-        if ($this->getEnableCoverage() !== false) {
+        if ($this->getEnableCoverage() !== false && $this->coverEnable !== false) {
             $coverage_report = $this->readCoverage($cover_xml_path);
             foreach($results as $result) {
                 $result->setCoverage($coverage_report);
@@ -212,5 +213,4 @@ final class MochaEngine extends ArcanistUnitTestEngine {
 
         return $reports;
     }
-
 }
