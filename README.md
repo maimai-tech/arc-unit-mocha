@@ -1,5 +1,10 @@
 arc-unit-mocha
 ==============
+## Tips
+This project is forked from https://github.com/rutgersmobile/arc-unit-mocha.git,
+and there are some advanced features
+  1. babel is enabled in mocha cmd
+  2. add coverage enable config
 
 Arcanist unit test engine for running [Mocha](http://mochajs.org/) tests with
 [Istanbul](https://github.com/gotwarlost/istanbul/) for coverage reports.
