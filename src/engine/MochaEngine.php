@@ -12,6 +12,7 @@ final class MochaEngine extends ArcanistUnitTestEngine {
     private $coverExcludes;
     private $testIncludes;
     private $coverEnable;
+    private $diff_list;
 
     /**
      * Determine which executables and test paths to use.
@@ -47,10 +48,6 @@ final class MochaEngine extends ArcanistUnitTestEngine {
         $this->coverEnable = $config->getConfigFromAnySource(
             'unit.mocha.coverage.enable', 1);
 
-        $this->testIncludes = $config->getConfigFromAnySource(
-            'unit.mocha.test.include',
-            '');
-
         // Make sure required binaries are available
         $binaries = array($this->mochaBin, $this->_mochaBin,
                           $this->istanbulBin);
@@ -65,9 +62,66 @@ final class MochaEngine extends ArcanistUnitTestEngine {
         }
     }
 
-    public function run() {
-        $this->loadEnvironment();
+     /**
+     * get include info
+     */
+    protected function getTestPathFromConfig() {
+        // Get config options
+        $config = $this->getConfigurationManager();
+        $diff_list = $this->getDiff();
+        $include_config = $config->getConfigFromAnySource(
+            'unit.mocha.test.include',
+            '');
+        $reslut_config = array();
+        if (!empty($diff_list)) {
+            foreach ($diff_list as $diff_item) {
+                foreach ($include_config as $value) {
+                    if (preg_match($value["test_reg"], $diff_item)) {                    
+                          // merge multiple arrays into one
+                        $reslut_config = array_merge($reslut_config,$value["test_path"]);
+                    }
+                }
+             }
+        }
+        return $reslut_config;
+    }
 
+
+    // get all diff paths by git diff
+    protected function getDiff() { 
+        try {
+            $base_master_commit_id = trim(shell_exec('git rev-parse HEAD'));
+            $head_commit_id = shell_exec('git merge-base origin/master HEAD');
+            $head_commit_id = trim($head_commit_id);
+            $cmd = 'git diff --name-status ' . $head_commit_id . ' '. $base_master_commit_id . ' | awk \'{print $2}\'';
+            $diff_list = shell_exec($cmd);
+            return explode("\n",$diff_list);
+        } catch (Exception $e) {
+            throw new Exception(
+                pht(
+                    'get diff error "%s".'));
+        }
+    }
+
+    // check if unit test is neccessary
+    protected function checkAndSetUintInclude() {
+        $disableUnit = true;
+        $this->testIncludes = $this->getTestPathFromConfig();
+        if (!empty($this->testIncludes)) {
+            echo 'Match successfully! Unit Test is running...';
+            $disableUnit = false;
+        }
+        return $disableUnit;
+    }
+
+    public function run() {
+        $disableUnit = $this->checkAndSetUintInclude();
+        if ($disableUnit) {
+            // return an empty array when unit test is skipped
+            echo 'None is matched, Unit Test is skipped...';
+            return array();
+        }
+        $this->loadEnvironment();
         // Temporary files for holding report output
         $xunit_tmp = new TempFile();
         $cover_xml_path = $this->coverReportDir . '/clover.xml';
